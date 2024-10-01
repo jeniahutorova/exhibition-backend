@@ -1,62 +1,93 @@
 const format = require('pg-format');
-const db = require('../connection');
-const { convertTimestampToDate } = require('./utils');  // If you have utility functions for formatting dates
+const db = require('../../db/connection'); // Make sure this is set up for MySQL
+const { fetchData } = require('../../src/api'); // Function to fetch data from API
 
-const seed = ({ exhibitionData, userData }) => {
-  return db
-    .query(`DROP TABLE IF EXISTS exhibitions;`)
-    .then(() => {
-      return db.query(`DROP TABLE IF EXISTS users;`);
-    })
-    .then(() => {
-      // Create the users table
-      const createUsersTablePromise = db.query(`
-        CREATE TABLE users (
-          username VARCHAR PRIMARY KEY,
-          name VARCHAR NOT NULL,
-          avatar_url VARCHAR
+const seed = async () => {
+    try {
+        await db.query(`DROP TABLE IF EXISTS exhibitions;`);
+        await db.query(`DROP TABLE IF EXISTS objects;`);
+        await db.query(`DROP TABLE IF EXISTS departments;`);
+
+        // Create departments table
+        await db.query(`
+            CREATE TABLE departments (
+                department_id INT AUTO_INCREMENT PRIMARY KEY,
+                name VARCHAR(255) NOT NULL,
+                description TEXT
+            );
+        `);
+
+        // Create objects table
+        await db.query(`
+            CREATE TABLE object (
+                object_id INT AUTO_INCREMENT PRIMARY KEY,
+                name VARCHAR(255) NOT NULL,
+                description TEXT,
+                department_id INT,
+                FOREIGN KEY (department_id) REFERENCES departments(department_id) ON DELETE SET NULL
+            );
+        `);
+
+        // Create exhibitions table
+        await db.query(`
+            CREATE TABLE exhibitions (
+                exhibition_id INT AUTO_INCREMENT PRIMARY KEY,
+                name VARCHAR(255) NOT NULL,
+                description TEXT,
+                date DATE,
+                location VARCHAR(255),
+                department_id INT,
+                FOREIGN KEY (department_id) REFERENCES departments(department_id) ON DELETE SET NULL
+            );
+        `);
+
+        // Fetch department data from API
+        const departmentDataResponse = await fetchData('departments');
+        const departmentData = departmentDataResponse.departments;
+
+        if (!Array.isArray(departmentData) || departmentData.length === 0) {
+            throw new Error('No department data found');
+        }
+
+        // Insert department data
+        const insertDepartmentsQueryStr = format(
+            'INSERT INTO departments (name, description) VALUES %L;',
+            departmentData.map(({ displayName, departmentDesc }) => [displayName, departmentDesc || ''])
         );
-      `);
 
-      // Create the exhibitions table
-      const createExhibitionsTablePromise = db.query(`
-        CREATE TABLE exhibitions (
-          exhibition_id SERIAL PRIMARY KEY,
-          name VARCHAR NOT NULL,
-          description TEXT NOT NULL,
-          date DATE NOT NULL,
-          location VARCHAR NOT NULL,
-          organizer VARCHAR REFERENCES users(username) -- assuming users organize exhibitions
+        await db.query(insertDepartmentsQueryStr);
+
+        // Hardcode object data
+        const objectsData = await fetchData('objects/[objectID]');
+        const objectValues = objectsData.map(({ name, description, department_id }) => [name, description || '', department_id]);
+
+
+        const insertObjectsQueryStr = format(
+            'INSERT INTO objects (name, description, department_id) VALUES %L;',
+            objectValues
         );
-      `);
 
-      return Promise.all([createUsersTablePromise, createExhibitionsTablePromise]);
-    })
-    .then(() => {
-      // Insert users data
-      const insertUsersQueryStr = format(
-        'INSERT INTO users (username, name, avatar_url) VALUES %L;',
-        userData.map(({ username, name, avatar_url }) => [username, name, avatar_url])
-      );
-      return db.query(insertUsersQueryStr);
-    })
-    .then(() => {
-      // Optionally, format exhibition dates if needed
-      const formattedExhibitionData = exhibitionData.map(convertTimestampToDate);
+        // Insert object data
+        await db.query(insertObjectsQueryStr);
 
-      // Insert exhibition data
-      const insertExhibitionsQueryStr = format(
-        'INSERT INTO exhibitions (name, description, date, location, organizer) VALUES %L;',
-        formattedExhibitionData.map(
-          ({ name, description, date, location, organizer }) => [name, description, date, location, organizer]
-        )
-      );
+        // Hardcode exhibition data
+        const exhibitionValues = [
+            ['Art of History', 'An exhibition featuring historical art.', '2024-12-01', 'Gallery A', 1], // Assuming department_id 1 exists
+            ['Modern Expressions', 'An exhibition showcasing modern art.', '2024-12-10', 'Gallery B', 1], // Assuming department_id 1 exists
+        ];
 
-      return db.query(insertExhibitionsQueryStr);
-    })
-    .catch((err) => {
-      console.error("Error seeding the database:", err);
-    });
+        const insertExhibitionsQueryStr = format(
+            'INSERT INTO exhibitions (name, description, date, location, department_id) VALUES %L;',
+            exhibitionValues
+        );
+
+        // Insert exhibition data
+        await db.query(insertExhibitionsQueryStr);
+
+        console.log("Data successfully seeded!");
+    } catch (err) {
+        console.error("Error seeding data:", err);
+    }
 };
 
-module.exports = seed;
+module.exports = seed; // Export the seed function

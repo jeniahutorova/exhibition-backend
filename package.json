@@ -3,11 +3,11 @@
   "version": "1.0.0",
   "main": "listen.js",
   "scripts": {
-    "setup-dbs": "psql -f ./db/setup.sql",
+    "setup-dbs": "mysql -u root -p < ./db/setup.sql",
     "seed": "node ./db/seeds/run-seed.js",
     "test": "jest",
     "prepare": "husky",
-    "start": "node listen.js",
+    "start": "kill-port 3001 && node listen.js",
     "seed-prod": "NODE_ENV=production npm run seed"
   },
   "keywords": [],
@@ -15,11 +15,17 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "axios": "^1.7.7",
     "body-parser": "^1.20.3",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.21.0",
-    "pg-format": "^1.0.4"
+    "fs": "^0.0.1-security",
+    "kill-port": "^2.0.1",
+    "mysql2": "^3.11.3",
+    "pg": "^8.13.0",
+    "pg-format": "^1.0.4",
+    "supertest": "^7.0.0"
   },
   "devDependencies": {
     "husky": "^9.1.6",
